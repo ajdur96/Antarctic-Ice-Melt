@@ -140,6 +140,21 @@
     ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 5 * dpr; ctx.setLineDash([]); ctx.stroke(path);
     ctx.strokeStyle = '#2a2140'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([9 * dpr, 4 * dpr, 2 * dpr, 4 * dpr]); ctx.stroke(path);
     ctx.setLineDash([]);
+    if (meta.counties) {   // Arlington County: thinner solid line
+      const cp = new Path2D();
+      for (const line of meta.counties.lines) {
+        cp.moveTo(line[0][0] * s + ox, line[0][1] * s + oy);
+        for (let i = 1; i < line.length; i++) cp.lineTo(line[i][0] * s + ox, line[i][1] * s + oy);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 4 * dpr; ctx.stroke(cp);
+      ctx.strokeStyle = '#7a2e8e'; ctx.lineWidth = 1.6 * dpr; ctx.stroke(cp);
+      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.fillStyle = '#7a2e8e';
+      for (const [name, x, y] of meta.counties.labels) {
+        const sx = x * s + ox, sy = y * s + oy, txt = name.split('').join(String.fromCharCode(8202));
+        ctx.strokeText(txt, sx, sy); ctx.fillText(txt, sx, sy);
+      }
+    }
     ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineWidth = 4 * dpr; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.fillStyle = '#2a2140';
     for (const [name, x, y] of S.labels) {
@@ -269,6 +284,7 @@
     ui('dcLegend').innerHTML =
       `<div>New flood water, by depth<div class="ramp" style="background:${ramp}"></div><div class="rampLbl"><span>0 m</span><span>35</span><span>70 m</span></div></div>` +
       `<div class="row"><span class="sw" style="background:repeating-linear-gradient(90deg,#2a2140 0 6px,#fff 6px 8px);height:4px;border:0"></span>State boundary</div>` +
+      `<div class="row"><span class="sw" style="background:#7a2e8e;height:3px;border:0"></span>Arlington County</div>` +
       sw('#353b44', 'Building, dry') + sw('#f4a340', 'Building, water at the walls') + sw('#c8381f', 'Building, nearly submerged') +
       `<div class="note" style="margin:2px 0">Fully submerged buildings disappear. Individual footprints appear when you zoom in.</div>` +
       lc.map(([k, l]) => sw(`rgb(${meta.nlcdPal[k]})`, l)).join('');
