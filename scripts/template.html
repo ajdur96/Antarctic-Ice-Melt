@@ -121,7 +121,7 @@
       <label class="tog antOnly" style="margin-top:0"><input type="checkbox" id="coastToggle" checked> Show today's coastline</label>
       <label class="tog antOnly"><input type="checkbox" id="reboundToggle" checked> Isostatic rebound (bedrock rises as ice is removed)</label>
       <label class="tog dcOnly" style="margin-top:0;display:none"><input type="checkbox" id="fpToggle" checked> Gravitational fingerprint (DC gets 1.25× the global rise)</label>
-      <label class="tog dcOnly" style="display:none"><input type="checkbox" id="stateToggle" checked> Show state and Arlington County boundaries</label>
+      <label class="tog dcOnly" style="display:none"><input type="checkbox" id="stateToggle" checked> Show state, county and city boundaries</label>
     </div>
 
     <div class="card antOnly">
@@ -380,7 +380,7 @@
   const view = { scale: 1, tx: 0, ty: 0 }; // in map-pixel units relative to fit
   let fit = 1;
   function resize() {
-    const dpr = window.devicePixelRatio || 1, rect = wrap.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 2 : 3), rect = wrap.getBoundingClientRect();
     canvas.width = Math.round(rect.width * dpr); canvas.height = Math.round(rect.height * dpr);
     fit = Math.min(canvas.width, canvas.height) / n;
     draw();
@@ -494,7 +494,7 @@
   let pending = false;
   function update() {
     if (pending) return; pending = true;
-    requestAnimationFrame(() => { pending = false; compute(); paint(); });
+    requestAnimationFrame(() => { pending = false; compute(); if (window.antVisible === false) { antDirty = true; updateStats(); } else paint(); });
   }
   slider.addEventListener('input', () => { state.melt = slider.value / 100; update(); });
   document.getElementById('coastToggle').addEventListener('change', e => { state.coast = e.target.checked; legend(); paint(); });
@@ -522,8 +522,9 @@
   });
   slider.addEventListener('pointerdown', stopPlay);
 
+  var antDirty = false;
   resize(); legend(); compute(); paint();
-  window.antResize = resize;
+  window.antResize = () => { resize(); if (antDirty) { antDirty = false; paint(); } };
 })();
 </script>
 <script>
@@ -541,6 +542,7 @@ __DCMODULE__
     document.querySelectorAll('.dcOnly').forEach(el => el.style.display = tab === 'dc' ? '' : 'none');
     document.getElementById('pageTitle').textContent = titles[tab][0];
     document.getElementById('pageSub').textContent = titles[tab][1];
+    window.antVisible = tab !== 'dc';
     if (tab === 'dc') window.dcMap.show(); else { window.dcMap.hide(); window.antResize && window.antResize(); }
     try { history.replaceState(null, '', tab === 'dc' ? '#dc' : '#antarctica'); } catch (e) {}
   }

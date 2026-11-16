@@ -118,7 +118,7 @@
   // ---------- view ----------
   const view = { scale: 1, tx: 0, ty: 0 }; let fit = 1;
   function resize() {
-    const dpr = window.devicePixelRatio || 1, r = wrap.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, lite ? 2 : 3), r = wrap.getBoundingClientRect();
     if (!r.width) return;
     canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
     if (meta) fit = Math.min(canvas.width / meta.baseW, canvas.height / meta.baseH);
@@ -140,7 +140,7 @@
   }
   // state boundaries (Census TIGER) with a white halo, plus labels, drawn at constant screen width
   function drawStates(s, ox, oy) {
-    const dpr = window.devicePixelRatio || 1, S = meta.states;
+    const dpr = canvas.width / canvas.getBoundingClientRect().width, S = meta.states;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const path = new Path2D();
     for (const line of S.lines) {
@@ -151,18 +151,20 @@
     ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 5 * dpr; ctx.setLineDash([]); ctx.stroke(path);
     ctx.strokeStyle = '#2a2140'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([9 * dpr, 4 * dpr, 2 * dpr, 4 * dpr]); ctx.stroke(path);
     ctx.setLineDash([]);
-    if (meta.counties) {   // Arlington County: thinner solid line
+    if (meta.counties) {   // county and independent-city boundaries: thinner solid lines
       const cp = new Path2D();
       for (const line of meta.counties.lines) {
         cp.moveTo(line[0][0] * s + ox, line[0][1] * s + oy);
         for (let i = 1; i < line.length; i++) cp.lineTo(line[i][0] * s + ox, line[i][1] * s + oy);
       }
-      ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 4 * dpr; ctx.stroke(cp);
-      ctx.strokeStyle = '#7a2e8e'; ctx.lineWidth = 1.6 * dpr; ctx.stroke(cp);
-      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.fillStyle = '#7a2e8e';
-      for (const [name, x, y] of meta.counties.labels) {
+      ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 3.5 * dpr; ctx.stroke(cp);
+      ctx.strokeStyle = '#7a2e8e'; ctx.lineWidth = 1.4 * dpr; ctx.stroke(cp);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#7a2e8e'; ctx.strokeStyle = 'rgba(255,255,255,.9)';
+      for (const [name, x, y, size] of meta.counties.labels) {
+        const cssScale = s / dpr;                                  // CSS px per 10 m
+        if (cssScale < (size === 2 ? 0.15 : 0.12)) continue;       // names appear once there is room for them
         const sx = x * s + ox, sy = y * s + oy, txt = name.split('').join(String.fromCharCode(8202));
+        ctx.font = `600 ${(size === 1 ? 11 : 10) * dpr}px system-ui, sans-serif`; ctx.lineWidth = 3.5 * dpr;
         ctx.strokeText(txt, sx, sy); ctx.fillText(txt, sx, sy);
       }
     }
@@ -295,7 +297,7 @@
     ui('dcLegend').innerHTML =
       `<div>New flood water, by depth<div class="ramp" style="background:${ramp}"></div><div class="rampLbl"><span>0 m</span><span>35</span><span>70 m</span></div></div>` +
       `<div class="row"><span class="sw" style="background:repeating-linear-gradient(90deg,#2a2140 0 6px,#fff 6px 8px);height:4px;border:0"></span>State boundary</div>` +
-      `<div class="row"><span class="sw" style="background:#7a2e8e;height:3px;border:0"></span>Arlington County</div>` +
+      `<div class="row"><span class="sw" style="background:#7a2e8e;height:3px;border:0"></span>County / city boundary</div>` +
       sw('#353b44', 'Building, dry') + sw('#f4a340', 'Building, water at the walls') + sw('#c8381f', 'Building, nearly submerged') +
       `<div class="note" style="margin:2px 0">Fully submerged buildings disappear. Individual footprints appear when you zoom in.</div>` +
       lc.map(([k, l]) => sw(`rgb(${meta.nlcdPal[k]})`, l)).join('');
