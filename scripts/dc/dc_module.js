@@ -3,6 +3,9 @@
   const FP = 1.25;                       // Antarctic sea-level fingerprint factor for the Mid-Atlantic
   const ui = id => document.getElementById(id);
   const wrap = ui('dcWrap'), canvas = ui('dcMap'), ctx = canvas.getContext('2d');
+  // Phones get a half-resolution base image and 40 m water/building layers to stay within mobile memory limits
+  const lite = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 820;
+  let gs = 2;                            // base (10 m) pixels per water-grid cell
   const st = { globalS: 0, fp: true, states: true, loaded: false, visible: false, dirty: true };
   let meta, W, H, flood, base, waterCv, waterCtx, waterImg, dotCv, dotCtx, dotImg;
   let bStart, bSub, bOcc, bNv, bOff, coords, bCell, tileStart;
@@ -11,7 +14,7 @@
     const r = await fetch(url);
     if (!r.ok) throw new Error(url + ' ' + r.status);
     let buf;
-    if (url.endsWith('.txt')) { const s = (await r.text()).trim(); buf = Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+    if (url.endsWith('.txt')) { const s = atob((await r.text()).trim()); buf = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) buf[i] = s.charCodeAt(i); }
     else buf = new Uint8Array(await r.arrayBuffer());
     if (buf[0] !== 0x1f || buf[1] !== 0x8b) return buf;      // already decompressed by the server
     const s = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
@@ -19,14 +22,22 @@
   }
   async function load() {
     try {
-      ui('dcLoading').textContent = 'Loading elevation, land cover and 706,394 buildings…';
+      ui('dcLoading').textContent = 'Loading elevation, land cover and 417,042 buildings…';
       const [m, fl, bl, img] = await Promise.all([
         fetch('dc/dc_meta.json').then(r => r.json()),
         gunzip('dc/dc_flood.txt'),
         gunzip('dc/dc_buildings.txt'),
-        new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = 'dc/dc_base.webp'; })
+        new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = lite ? 'dc/dc_base_lite.webp' : 'dc/dc_base.webp'; })
       ]);
       meta = m; W = m.W; H = m.H; flood = fl; base = img;
+      if (lite) {   // collapse the 20 m flood grid to 40 m (lowest flood level of each 2x2 block)
+        const W2 = W >> 1, H2 = H >> 1, f2 = new Uint8Array(W2 * H2);
+        for (let r = 0; r < H2; r++) for (let c = 0; c < W2; c++) {
+          const i = 2 * r * W + 2 * c;
+          f2[r * W2 + c] = Math.min(fl[i], fl[i + 1], fl[i + W], fl[i + W + 1]);
+        }
+        flood = f2; W = W2; H = H2; gs = 4;
+      }
       parseBuildings(bl);
       waterCv = document.createElement('canvas'); waterCv.width = W; waterCv.height = H;
       waterCtx = waterCv.getContext('2d'); waterImg = waterCtx.createImageData(W, H);
@@ -55,7 +66,7 @@
     coords = new Int32Array(totalV * 2);
     let v = 0;
     for (k = 0; k < count; k++) {
-      let p = tmp[k], x = dv.getUint32(p, true), y = dv.getUint32(p + 4, true); p += 8;
+      let p = tmp[k], x = dv.getInt32(p, true), y = dv.getInt32(p + 4, true); p += 8;
       bOff[k] = v; let sx = 0, sy = 0;
       coords[v * 2] = x; coords[v * 2 + 1] = y; sx += x; sy += y; v++;
       for (let i = 1; i < bNv[k]; i++) {
@@ -63,7 +74,7 @@
         coords[v * 2] = x; coords[v * 2 + 1] = y; sx += x; sy += y; v++;
       }
       // coords are 0.5 m units; flood grid cells are 20 m = 40 units
-      const cx = Math.min(W - 1, Math.max(0, Math.floor(sx / bNv[k] / 40))), cy = Math.min(H - 1, Math.max(0, Math.floor(sy / bNv[k] / 40)));
+      const cx = Math.min(W - 1, Math.max(0, Math.floor(sx / bNv[k] / (gs * 20)))), cy = Math.min(H - 1, Math.max(0, Math.floor(sy / bNv[k] / (gs * 20))));
       bCell[k] = cy * W + cx;
     }
     meta.bldCount = count;
@@ -120,10 +131,10 @@
     const s = sNow(), ox = canvas.width / 2 + view.tx - meta.baseW / 2 * s, oy = canvas.height / 2 + view.ty - meta.baseH / 2 * s;
     ctx.setTransform(s, 0, 0, s, ox, oy);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(base, 0, 0);
-    ctx.drawImage(waterCv, 0, 0, W, H, 0, 0, W * 2, H * 2);
+    ctx.drawImage(base, 0, 0, meta.baseW, meta.baseH);
+    ctx.drawImage(waterCv, 0, 0, W, H, 0, 0, W * gs, H * gs);
     if (s < 0.9) {
-      ctx.globalAlpha = 0.85; ctx.drawImage(dotCv, 0, 0, W, H, 0, 0, W * 2, H * 2); ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.85; ctx.drawImage(dotCv, 0, 0, W, H, 0, 0, W * gs, H * gs); ctx.globalAlpha = 1;
     } else drawPolygons(s, ox, oy);
     if (st.states) drawStates(s, ox, oy);
   }
@@ -244,7 +255,7 @@
     const el = ui('dcReadout'); if (!st.loaded) return;
     const [bx, by] = screenToBase(cx, cy);
     if (bx < 0 || by < 0 || bx >= meta.baseW || by >= meta.baseH) { el.style.display = 'none'; return; }
-    const c = Math.floor(bx / 2), r = Math.floor(by / 2), f = flood[r * W + c];
+    const c = Math.min(W - 1, Math.floor(bx / gs)), r = Math.min(H - 1, Math.floor(by / gs)), f = flood[r * W + c];
     const [lat, lon] = utmToLatLon(meta.x0 + bx * 10, meta.y0 - by * 10);
     let txt;
     if (f === 0) txt = 'Water today (river or bay)';
