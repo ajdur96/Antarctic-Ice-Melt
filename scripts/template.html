@@ -432,17 +432,28 @@
   slider.addEventListener('input', () => { state.melt = slider.value / 100; update(); });
   document.getElementById('coastToggle').addEventListener('change', e => { state.coast = e.target.checked; legend(); paint(); });
   document.getElementById('reboundToggle').addEventListener('change', e => { state.rebound = e.target.checked; update(); });
-  let playing = null;
+  // Play loops: melt to 100%, hold for a moment, then start over from 0% until paused.
+  const stepMs = 120, endPauseMs = 2500;
+  let playing = false, playTimer = null;
   const playBtn = document.getElementById('play');
+  function setMelt(v) { slider.value = v; state.melt = v / 100; update(); }
+  function playStep() {
+    if (!playing) return;
+    if (+slider.value >= 100) {
+      playTimer = setTimeout(() => { if (playing) { setMelt(0); playTimer = setTimeout(playStep, stepMs); } }, endPauseMs);
+      return;
+    }
+    setMelt(+slider.value + 1);
+    playTimer = setTimeout(playStep, stepMs);
+  }
+  function stopPlay() { playing = false; clearTimeout(playTimer); playBtn.textContent = '▶ Play'; }
   playBtn.addEventListener('click', () => {
-    if (playing) { clearInterval(playing); playing = null; playBtn.textContent = '▶ Play'; return; }
-    if (+slider.value >= 100) slider.value = 0;
-    playBtn.textContent = '❚❚ Pause';
-    playing = setInterval(() => {
-      slider.value = +slider.value + 1; state.melt = slider.value / 100; update();
-      if (+slider.value >= 100) { clearInterval(playing); playing = null; playBtn.textContent = '▶ Play'; }
-    }, 120);
+    if (playing) { stopPlay(); return; }
+    playing = true; playBtn.textContent = '❚❚ Pause';
+    if (+slider.value >= 100) setMelt(0);
+    playTimer = setTimeout(playStep, stepMs);
   });
+  slider.addEventListener('pointerdown', stopPlay);
 
   resize(); legend(); compute(); paint();
 })();
