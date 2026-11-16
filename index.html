@@ -16,7 +16,7 @@
   header { width: 100%; }
   h1 { margin: 0 0 4px; font-size: 1.5rem; letter-spacing: .02em; }
   .sub { color: var(--muted); font-size: .9rem; margin: 0; }
-  .mapWrap { position: relative; flex: 1 1 560px; aspect-ratio: 1 / 1; max-height: 86vh;
+  .mapWrap { position: relative; flex: 1 1 560px; aspect-ratio: 1 / 1; max-height: 86vh; align-self: flex-start;
     background: #0a1a33; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
     touch-action: none; cursor: grab; }
   .mapWrap.dragging { cursor: grabbing; }
@@ -50,16 +50,28 @@
   .rampLbl { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); }
   .note { font-size: .78rem; color: var(--muted); line-height: 1.45; }
   .note b { color: var(--text); font-weight: 600; }
+  .tabs { display: flex; gap: 6px; margin-top: 12px; }
+  .tabs button { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent;
+    color: var(--muted); font-size: .95rem; cursor: pointer; }
+  .tabs button.on { background: #24384f; color: var(--text); border-color: #36506e; }
+  .dcWrap { background: #cfd6dc; }
+  body.dc .antOnly { display: none !important; }
+  .rowlist { display: grid; gap: 5px; font-size: .85rem; }
+  .rowlist .row { display: flex; align-items: center; gap: 8px; }
 </style>
 </head>
 <body>
 <div class="app">
   <header>
-    <h1>Antarctica: Melt the Ice</h1>
-    <p class="sub">Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.</p>
+    <h1 id="pageTitle">Antarctica: Melt the Ice</h1>
+    <p class="sub" id="pageSub">Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.</p>
+    <div class="tabs" id="tabs">
+      <button data-tab="ant" class="on">Antarctica</button>
+      <button data-tab="dc">DC Metro</button>
+    </div>
   </header>
 
-  <div class="mapWrap" id="mapWrap">
+  <div class="mapWrap antOnly" id="mapWrap">
     <canvas id="map"></canvas>
     <div class="loading" id="loading">Unpacking 1.4 million cells of ice…</div>
     <div class="readout" id="readout"></div>
@@ -67,6 +79,16 @@
       <button id="zoomIn" title="Zoom in">+</button>
       <button id="zoomOut" title="Zoom out">−</button>
       <button id="zoomReset" title="Reset view">⟲</button>
+    </div>
+  </div>
+  <div class="mapWrap dcWrap dcOnly" id="dcWrap" style="display:none;aspect-ratio:6176/4580">
+    <canvas id="dcMap" style="width:100%;height:100%;display:block"></canvas>
+    <div class="loading" id="dcLoading" style="color:#33465a">Loading…</div>
+    <div class="readout" id="dcReadout"></div>
+    <div class="mapBtns">
+      <button id="dcZoomIn" title="Zoom in">+</button>
+      <button id="dcZoomOut" title="Zoom out">−</button>
+      <button id="dcZoomReset" title="Reset view">⟲</button>
     </div>
   </div>
 
@@ -78,26 +100,59 @@
         <button class="play" id="play">▶ Play</button>
       </div>
       <div class="big" id="pct">0%</div>
-      <div class="stats">
+      <div class="stats antOnly">
         <div class="stat"><div class="v" id="sSlr">0.0 m</div><div class="k">Global sea level rise</div></div>
         <div class="stat"><div class="v" id="sIce">–</div><div class="k">Ice volume remaining</div></div>
         <div class="stat"><div class="v" id="sLand">–</div><div class="k">Ice-free land</div></div>
         <div class="stat"><div class="v" id="sFlood">–</div><div class="k">Land &amp; ice now under the sea</div></div>
       </div>
+      <div class="stats dcOnly" style="display:none">
+        <div class="stat"><div class="v" id="dcRise">0.0 m</div><div class="k">Sea level rise in DC</div></div>
+        <div class="stat"><div class="v" id="dcLand">–</div><div class="k">Land flooded</div></div>
+        <div class="stat"><div class="v" id="dcBTouch">–</div><div class="k">Buildings with water at the walls</div></div>
+        <div class="stat"><div class="v" id="dcBSub">–</div><div class="k">Buildings fully submerged</div></div>
+        <div class="stat"><div class="v" id="dcDev">–</div><div class="k">Developed land lost</div></div>
+        <div class="stat"><div class="v" id="dcGreen">–</div><div class="k">Forest &amp; wetland lost</div></div>
+      </div>
     </div>
 
     <div class="card">
       <h2>Display</h2>
-      <label class="tog" style="margin-top:0"><input type="checkbox" id="coastToggle" checked> Show today's coastline</label>
-      <label class="tog"><input type="checkbox" id="reboundToggle" checked> Isostatic rebound (bedrock rises as ice is removed)</label>
+      <label class="tog antOnly" style="margin-top:0"><input type="checkbox" id="coastToggle" checked> Show today's coastline</label>
+      <label class="tog antOnly"><input type="checkbox" id="reboundToggle" checked> Isostatic rebound (bedrock rises as ice is removed)</label>
+      <label class="tog dcOnly" style="margin-top:0;display:none"><input type="checkbox" id="fpToggle" checked> Gravitational fingerprint (DC gets 1.25× the global rise)</label>
     </div>
 
-    <div class="card">
+    <div class="card antOnly">
       <h2>Legend</h2>
       <div class="legend" id="legend"></div>
     </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>Land cover under water</h2>
+      <div class="rowlist" id="dcLcRows"></div>
+    </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>Buildings submerged, by use</h2>
+      <div class="rowlist" id="dcOccRows"></div>
+    </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>Legend</h2>
+      <div class="legend" id="dcLegend"></div>
+    </div>
+    <div class="card note dcOnly" style="display:none">
+      <b>How it works.</b> The slider is shared with the Antarctica tab: the sea level rise from Antarctic melt is applied to the DC area.
+      With the fingerprint on, DC gets 1.25× the global number, because losing Antarctica's gravitational pull pushes water toward the
+      Northern Hemisphere (Mitrovica et al., 2009, <i>Science</i>). Water spreads only into ground connected to the tidal Potomac,
+      the Anacostia or the map edge, so enclosed low spots stay dry until water tops their rim. A building gets water at its walls when the
+      water reaches its lowest corner and is fully submerged when water passes its roof (highest ground + FEMA height; 6 m if unknown).
+      <br><br>
+      <b>Simplifications.</b> Antarctica only: no Greenland, glaciers or thermal expansion. No tides, storm surge, erosion or land subsidence.
+      Elevations are NAVD88, roughly today's mean sea level.
+      <br><br>
+      <b>Data.</b> USGS 3DEP 1/3 arc-second DEM (10 m), NLCD 2021 land cover (30 m), FEMA/ORNL USA Structures (Region 3), all in UTM 18N.
+    </div>
 
-    <div class="card note">
+    <div class="card note antOnly">
       <b>How it works.</b> Each area thins on its own schedule. Floating ice shelves go first, then low-lying, marine-based and more northerly ice (West Antarctica, the Peninsula, the coasts); the high East Antarctic plateau goes last, with some smooth random variation mixed in. The slider is the share of total ice volume melted. Sea level rise comes from the
       ice volume above flotation that is lost, spread over the world ocean (3.618 × 10⁸ km²).
       Ice floats wherever it is too thin to stay grounded below the new sea level. Elevations are shown relative to the <i>new</i> sea level.
@@ -178,6 +233,16 @@
     return { t: (lo + u) / steps, S: clockSlr[lo] + (clockSlr[hi] - clockSlr[lo]) * u };
   }
   const meltNow = new Float32Array(cellCount);
+  window.antarctica = {
+    // % of Antarctic ice volume melted that produces global rise g (null if more than full melt)
+    meltForGlobalRise(g) {
+      if (g > clockSlr[steps]) return null;
+      let lo = 0, hi = steps;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (clockSlr[mid] < g) lo = mid; else hi = mid; }
+      const span = clockSlr[hi] - clockSlr[lo], u = span > 0 ? (g - clockSlr[lo]) / span : 0;
+      return 100 * (clockVol[lo] + (clockVol[hi] - clockVol[lo]) * u);
+    }
+  };
   document.getElementById('loading').remove();
 
   // ---------- working arrays ----------
@@ -260,6 +325,7 @@
     }
     markEdges(cls, coastNow, isWet);
     state.stats = { S, iceVol, landArea, floodArea };
+    window.dispatchEvent(new CustomEvent('meltchange', { detail: { S, melt: state.melt } }));
   }
 
   function paint() {
@@ -456,6 +522,296 @@
   slider.addEventListener('pointerdown', stopPlay);
 
   resize(); legend(); compute(); paint();
+  window.antResize = resize;
+})();
+</script>
+<script>
+// ================= DC metro tab =================
+(function () {
+  const FP = 1.25;                       // Antarctic sea-level fingerprint factor for the Mid-Atlantic
+  const ui = id => document.getElementById(id);
+  const wrap = ui('dcWrap'), canvas = ui('dcMap'), ctx = canvas.getContext('2d');
+  const st = { globalS: 0, fp: true, loaded: false, visible: false, dirty: true };
+  let meta, W, H, flood, base, waterCv, waterCtx, waterImg, dotCv, dotCtx, dotImg;
+  let bStart, bSub, bOcc, bNv, bOff, coords, bCell, tileStart;
+
+  async function gunzip(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(url + ' ' + r.status);
+    let buf;
+    if (url.endsWith('.txt')) { const s = (await r.text()).trim(); buf = Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+    else buf = new Uint8Array(await r.arrayBuffer());
+    if (buf[0] !== 0x1f || buf[1] !== 0x8b) return buf;      // already decompressed by the server
+    const s = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+  async function load() {
+    try {
+      ui('dcLoading').textContent = 'Loading elevation, land cover and 706,394 buildings…';
+      const [m, fl, bl, img] = await Promise.all([
+        fetch('dc/dc_meta.json').then(r => r.json()),
+        gunzip('dc/dc_flood.txt'),
+        gunzip('dc/dc_buildings.txt'),
+        new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = 'dc/dc_base.webp'; })
+      ]);
+      meta = m; W = m.W; H = m.H; flood = fl; base = img;
+      parseBuildings(bl);
+      waterCv = document.createElement('canvas'); waterCv.width = W; waterCv.height = H;
+      waterCtx = waterCv.getContext('2d'); waterImg = waterCtx.createImageData(W, H);
+      dotCv = document.createElement('canvas'); dotCv.width = W; dotCv.height = H;
+      dotCtx = dotCv.getContext('2d'); dotImg = dotCtx.createImageData(W, H);
+      st.loaded = true; ui('dcLoading').remove();
+      legend(); resize(); update();
+    } catch (e) {
+      ui('dcLoading').textContent = 'Could not load the DC data files (' + e.message + '). They must sit in a "dc" folder next to this page and be served over http(s).';
+    }
+  }
+
+  function parseBuildings(buf) {
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    const n = meta.bldTotal;
+    bStart = new Uint8Array(n); bSub = new Uint8Array(n); bOcc = new Uint8Array(n);
+    bNv = new Uint16Array(n); bOff = new Uint32Array(n); bCell = new Int32Array(n);
+    let o = 0, k = 0, totalV = 0;
+    const tmp = [];
+    while (o < buf.length && k < n) {
+      bStart[k] = buf[o]; bSub[k] = buf[o + 1]; bOcc[k] = buf[o + 2];
+      const nv = dv.getUint16(o + 3, true); bNv[k] = nv;
+      tmp.push(o + 5); o += 5 + 8 + (nv - 1) * 4; totalV += nv; k++;
+    }
+    const count = k;
+    coords = new Int32Array(totalV * 2);
+    let v = 0;
+    for (k = 0; k < count; k++) {
+      let p = tmp[k], x = dv.getUint32(p, true), y = dv.getUint32(p + 4, true); p += 8;
+      bOff[k] = v; let sx = 0, sy = 0;
+      coords[v * 2] = x; coords[v * 2 + 1] = y; sx += x; sy += y; v++;
+      for (let i = 1; i < bNv[k]; i++) {
+        x += dv.getInt16(p, true); y += dv.getInt16(p + 2, true); p += 4;
+        coords[v * 2] = x; coords[v * 2 + 1] = y; sx += x; sy += y; v++;
+      }
+      // coords are 0.5 m units; flood grid cells are 20 m = 40 units
+      const cx = Math.min(W - 1, Math.max(0, Math.floor(sx / bNv[k] / 40))), cy = Math.min(H - 1, Math.max(0, Math.floor(sy / bNv[k] / 40)));
+      bCell[k] = cy * W + cx;
+    }
+    meta.bldCount = count;
+    const t = meta.tiles, nt = t.nx * t.ny;
+    tileStart = new Uint32Array(nt + 1);
+    for (let i = 0; i < nt; i++) tileStart[i + 1] = tileStart[i] + t.counts[i];
+  }
+
+  const localRise = () => st.globalS * (st.fp ? FP : 1);
+
+  // ---------- water + building dots ----------
+  const depthStops = [[0, [150, 225, 235]], [2, [80, 175, 210]], [10, [40, 115, 175]], [30, [20, 65, 130]], [70, [10, 35, 85]]];
+  function depthColor(d) {
+    for (let s = 1; s < depthStops.length; s++) if (d <= depthStops[s][0]) {
+      const [d0, a] = depthStops[s - 1], [d1, b] = depthStops[s], u = (d - d0) / (d1 - d0);
+      return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+    }
+    return depthStops[depthStops.length - 1][1];
+  }
+  const depthLut = []; for (let i = 0; i <= 200; i++) depthLut.push(depthColor(i * 0.5));
+  function computeLayers() {
+    const lv = localRise() / 0.5, px = waterImg.data, n = W * H;
+    for (let i = 0; i < n; i++) {
+      const f = flood[i], p = i * 4;
+      if (f > 0 && f !== 255 && f <= lv) {
+        const c = depthLut[Math.min(200, Math.round(lv - f))];
+        px[p] = c[0]; px[p + 1] = c[1]; px[p + 2] = c[2]; px[p + 3] = 225;
+      } else px[p + 3] = 0;
+    }
+    waterCtx.putImageData(waterImg, 0, 0);
+    const dp = dotImg.data; dp.fill(0);
+    for (let k = 0; k < meta.bldCount; k++) {
+      if (bSub[k] <= lv) continue;
+      const p = bCell[k] * 4;
+      if (bStart[k] <= lv) { dp[p] = 235; dp[p + 1] = 110; dp[p + 2] = 40; dp[p + 3] = 255; }
+      else if (dp[p + 3] === 0) { dp[p] = 45; dp[p + 1] = 50; dp[p + 2] = 58; dp[p + 3] = 200; }
+    }
+    dotCtx.putImageData(dotImg, 0, 0);
+  }
+
+  // ---------- view ----------
+  const view = { scale: 1, tx: 0, ty: 0 }; let fit = 1;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1, r = wrap.getBoundingClientRect();
+    if (!r.width) return;
+    canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+    if (meta) fit = Math.min(canvas.width / meta.baseW, canvas.height / meta.baseH);
+    draw();
+  }
+  const sNow = () => fit * view.scale;           // screen px per 10 m base pixel
+  function draw() {
+    if (!st.loaded) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#cfd6dc'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const s = sNow(), ox = canvas.width / 2 + view.tx - meta.baseW / 2 * s, oy = canvas.height / 2 + view.ty - meta.baseH / 2 * s;
+    ctx.setTransform(s, 0, 0, s, ox, oy);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(base, 0, 0);
+    ctx.drawImage(waterCv, 0, 0, W, H, 0, 0, W * 2, H * 2);
+    if (s < 0.9) {
+      ctx.globalAlpha = 0.85; ctx.drawImage(dotCv, 0, 0, W, H, 0, 0, W * 2, H * 2); ctx.globalAlpha = 1;
+    } else drawPolygons(s, ox, oy);
+  }
+  function drawPolygons(s, ox, oy) {
+    const lv = localRise() / 0.5, t = meta.tiles, tilePx = t.size / 10;
+    // visible base-pixel window
+    const vx0 = -ox / s, vy0 = -oy / s, vx1 = vx0 + canvas.width / s, vy1 = vy0 + canvas.height / s;
+    const tx0 = Math.max(0, Math.floor(vx0 / tilePx) - 1), tx1 = Math.min(t.nx - 1, Math.floor(vx1 / tilePx) + 1);
+    const ty0 = Math.max(0, Math.floor(vy0 / tilePx) - 1), ty1 = Math.min(t.ny - 1, Math.floor(vy1 / tilePx) + 1);
+    const dry = new Path2D(), wet = [new Path2D(), new Path2D(), new Path2D()];
+    const k5 = 0.05; // 0.5 m units -> 10 m base pixels
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      const tId = ty * t.nx + tx;
+      for (let k = tileStart[tId]; k < tileStart[tId + 1]; k++) {
+        if (bSub[k] <= lv) continue;
+        let path = dry;
+        if (bStart[k] <= lv) { const fr = (lv - bStart[k]) / Math.max(1, bSub[k] - bStart[k]); path = wet[Math.min(2, Math.floor(fr * 3))]; }
+        let v = bOff[k];
+        path.moveTo(coords[v * 2] * k5, coords[v * 2 + 1] * k5);
+        for (let i = 1; i < bNv[k]; i++) { v++; path.lineTo(coords[v * 2] * k5, coords[v * 2 + 1] * k5); }
+        path.closePath();
+      }
+    }
+    ctx.fillStyle = '#353b44'; ctx.fill(dry);
+    ['#f4a340', '#ec6f2d', '#c8381f'].forEach((c, i) => { ctx.fillStyle = c; ctx.fill(wet[i]); });
+    if (s > 3) { ctx.lineWidth = 1 / s; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke(dry); }
+  }
+  function screenToBase(cx, cy) {
+    const r = canvas.getBoundingClientRect(), dpr = canvas.width / r.width, s = sNow();
+    const sx = (cx - r.left) * dpr, sy = (cy - r.top) * dpr;
+    return [(sx - canvas.width / 2 - view.tx) / s + meta.baseW / 2, (sy - canvas.height / 2 - view.ty) / s + meta.baseH / 2];
+  }
+  function zoomAt(factor, cx, cy) {
+    const r = canvas.getBoundingClientRect(), dpr = canvas.width / r.width;
+    const sx = (cx - r.left) * dpr - canvas.width / 2, sy = (cy - r.top) * dpr - canvas.height / 2;
+    const ns = Math.min(80, Math.max(1, view.scale * factor)), f = ns / view.scale;
+    view.tx = sx - (sx - view.tx) * f; view.ty = sy - (sy - view.ty) * f; view.scale = ns;
+    if (ns === 1) { view.tx = 0; view.ty = 0; }
+    draw();
+  }
+  wrap.addEventListener('wheel', e => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+  const pointers = new Map(); let pinch = 0, moved = false;
+  wrap.addEventListener('pointerdown', e => {
+    if (e.target.closest('.mapBtns')) return;
+    wrap.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.clientX, e.clientY]); moved = false;
+    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); }
+  });
+  wrap.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) { readout(e.clientX, e.clientY); return; }
+    const prev = pointers.get(e.pointerId), dpr = canvas.width / canvas.getBoundingClientRect().width;
+    pointers.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pointers.size === 1) {
+      const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
+      if (Math.abs(dx) + Math.abs(dy) > 1) moved = true;
+      if (view.scale > 1) { view.tx += dx * dpr; view.ty += dy * dpr; draw(); }
+    } else if (pointers.size === 2) {
+      moved = true; const [a, b] = [...pointers.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      zoomAt(d / pinch, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); pinch = d;
+    }
+  });
+  const endP = e => { if (pointers.has(e.pointerId) && !moved && pointers.size === 1) readout(e.clientX, e.clientY); pointers.delete(e.pointerId); };
+  wrap.addEventListener('pointerup', endP); wrap.addEventListener('pointercancel', endP);
+  wrap.addEventListener('pointerleave', () => { if (!pointers.size) ui('dcReadout').style.display = 'none'; });
+  ui('dcZoomIn').onclick = () => { const r = canvas.getBoundingClientRect(); zoomAt(1.8, r.left + r.width / 2, r.top + r.height / 2); };
+  ui('dcZoomOut').onclick = () => { const r = canvas.getBoundingClientRect(); zoomAt(1 / 1.8, r.left + r.width / 2, r.top + r.height / 2); };
+  ui('dcZoomReset').onclick = () => { view.scale = 1; view.tx = 0; view.ty = 0; draw(); };
+  window.addEventListener('resize', () => { if (st.visible) resize(); });
+
+  // ---------- readout ----------
+  function utmToLatLon(E, N) { // UTM zone 18N, WGS84/NAD83
+    const a = 6378137, f = 1 / 298.257223563, e2 = f * (2 - f), ep2 = e2 / (1 - e2), k0 = 0.9996;
+    const x = E - 500000, M = N / k0, mu = M / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64));
+    const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+    const p1 = mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu) + (21 * e1 * e1 / 16) * Math.sin(4 * mu) + (151 * e1 ** 3 / 96) * Math.sin(6 * mu);
+    const C1 = ep2 * Math.cos(p1) ** 2, T1 = Math.tan(p1) ** 2, N1 = a / Math.sqrt(1 - e2 * Math.sin(p1) ** 2);
+    const R1 = a * (1 - e2) / (1 - e2 * Math.sin(p1) ** 2) ** 1.5, D = x / (N1 * k0);
+    const lat = p1 - (N1 * Math.tan(p1) / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4 / 24);
+    const lon = (D - (1 + 2 * T1 + C1) * D ** 3 / 6) / Math.cos(p1);
+    return [lat * 180 / Math.PI, -75 + lon * 180 / Math.PI];
+  }
+  function readout(cx, cy) {
+    const el = ui('dcReadout'); if (!st.loaded) return;
+    const [bx, by] = screenToBase(cx, cy);
+    if (bx < 0 || by < 0 || bx >= meta.baseW || by >= meta.baseH) { el.style.display = 'none'; return; }
+    const c = Math.floor(bx / 2), r = Math.floor(by / 2), f = flood[r * W + c];
+    const [lat, lon] = utmToLatLon(meta.x0 + bx * 10, meta.y0 - by * 10);
+    let txt;
+    if (f === 0) txt = 'Water today (river or bay)';
+    else if (f === 255) txt = 'Stays dry even at full melt';
+    else {
+      const need = f * 0.5, g = need / (st.fp ? FP : 1), pct = window.antarctica.meltForGlobalRise(g);
+      txt = `Floods at <b>${need.toFixed(1)} m</b> local rise` + (pct == null ? ' (more than Antarctica alone can supply)' : ` ≈ <b>${pct.toFixed(0)}%</b> of Antarctic ice melted`);
+      txt += localRise() >= need ? `<br>Under ${(localRise() - need).toFixed(1)} m of water now` : '';
+    }
+    el.innerHTML = `${lat.toFixed(4)}°N, ${Math.abs(lon).toFixed(4)}°W<br>${txt}`;
+    el.style.display = 'block';
+  }
+
+  // ---------- stats & legend ----------
+  function interp(arr, L) { const x = Math.min(arr.length - 1, L / 0.5), i = Math.floor(x), u = x - i; return i >= arr.length - 1 ? arr[arr.length - 1] : arr[i] + (arr[i + 1] - arr[i]) * u; }
+  const fmt = v => Math.round(v).toLocaleString();
+  function stats() {
+    const L = localRise();
+    ui('dcRise').textContent = L.toFixed(1) + ' m';
+    const a = meta.areaKm2; let land = 0, dev = 0, green = 0;
+    const rows = [];
+    for (const k in a) { const v = interp(a[k], L); land += v; if (+k >= 21 && +k <= 24) dev += v; if ([41, 42, 43, 90, 95].includes(+k)) green += v; if (v > 0.05) rows.push([meta.nlcdNames[k], v, meta.nlcdPal[k]]); }
+    ui('dcLand').textContent = land.toFixed(0) + ' km²';
+    ui('dcDev').textContent = dev.toFixed(0) + ' km²';
+    ui('dcBTouch').textContent = fmt(interp(meta.bld.start, L));
+    ui('dcBSub').textContent = fmt(interp(meta.bld.sub, L));
+    ui('dcGreen').textContent = green.toFixed(0) + ' km²';
+    rows.sort((x, y) => y[1] - x[1]);
+    ui('dcLcRows').innerHTML = rows.slice(0, 6).map(([n, v, c]) => `<div class="row"><span class="sw" style="background:rgb(${c})"></span><span style="flex:1">${n}</span><b>${v.toFixed(1)} km²</b></div>`).join('') || '<div class="note">Nothing flooded yet.</div>';
+    const occ = Object.entries(meta.bldOcc).map(([n, o]) => [n, interp(o.sub, L)]).filter(x => x[1] >= 1).sort((x, y) => y[1] - x[1]);
+    ui('dcOccRows').innerHTML = occ.slice(0, 6).map(([n, v]) => `<div class="row"><span style="flex:1">${n}</span><b>${fmt(v)}</b></div>`).join('') || '<div class="note">None yet.</div>';
+  }
+  function legend() {
+    const ramp = 'linear-gradient(90deg,' + depthStops.map(([d, c]) => `rgb(${c.map(Math.round)}) ${(d / 70 * 100).toFixed(0)}%`).join(',') + ')';
+    const sw = (c, l) => `<div class="row"><span class="sw" style="background:${c}"></span>${l}</div>`;
+    const lc = [[21, 'Developed (open → high intensity)'], [41, 'Forest'], [81, 'Pasture & crops'], [90, 'Wetlands'], [11, "Today's rivers & bay"]];
+    ui('dcLegend').innerHTML =
+      `<div>New flood water, by depth<div class="ramp" style="background:${ramp}"></div><div class="rampLbl"><span>0 m</span><span>35</span><span>70 m</span></div></div>` +
+      sw('#353b44', 'Building, dry') + sw('#f4a340', 'Building, water at the walls') + sw('#c8381f', 'Building, nearly submerged') +
+      `<div class="note" style="margin:2px 0">Fully submerged buildings disappear. Individual footprints appear when you zoom in.</div>` +
+      lc.map(([k, l]) => sw(`rgb(${meta.nlcdPal[k]})`, l)).join('');
+  }
+
+  let pending = false;
+  function update() {
+    if (!st.loaded) return;
+    if (!st.visible) { st.dirty = true; return; }
+    if (pending) return; pending = true;
+    requestAnimationFrame(() => { pending = false; st.dirty = false; computeLayers(); draw(); stats(); });
+  }
+  window.addEventListener('meltchange', e => { st.globalS = e.detail.S; update(); });
+  ui('fpToggle').addEventListener('change', e => { st.fp = e.target.checked; st.dirty = true; update(); });
+  window.dcMap = {
+    show() { st.visible = true; if (!st.loaded && !st.started) { st.started = true; load(); } resize(); if (st.dirty) update(); },
+    hide() { st.visible = false; }
+  };
+})();
+
+</script>
+<script>
+(function () {
+  const titles = {
+    ant: ['Antarctica: Melt the Ice', 'Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.'],
+    dc: ['Washington, DC: Rising Water', 'The same slider, seen from the DC metro area: watch the Potomac and Anacostia spread and buildings go under.']
+  };
+  function setTab(tab) {
+    document.body.classList.toggle('dc', tab === 'dc');
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+    document.querySelectorAll('.dcOnly').forEach(el => el.style.display = tab === 'dc' ? '' : 'none');
+    document.getElementById('pageTitle').textContent = titles[tab][0];
+    document.getElementById('pageSub').textContent = titles[tab][1];
+    if (tab === 'dc') window.dcMap.show(); else { window.dcMap.hide(); window.antResize && window.antResize(); }
+    try { history.replaceState(null, '', tab === 'dc' ? '#dc' : '#antarctica'); } catch (e) {}
+  }
+  document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  if (location.hash === '#dc') setTab('dc');
 })();
 </script>
 </body>

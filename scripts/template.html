@@ -16,7 +16,7 @@
   header { width: 100%; }
   h1 { margin: 0 0 4px; font-size: 1.5rem; letter-spacing: .02em; }
   .sub { color: var(--muted); font-size: .9rem; margin: 0; }
-  .mapWrap { position: relative; flex: 1 1 560px; aspect-ratio: 1 / 1; max-height: 86vh;
+  .mapWrap { position: relative; flex: 1 1 560px; aspect-ratio: 1 / 1; max-height: 86vh; align-self: flex-start;
     background: #0a1a33; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
     touch-action: none; cursor: grab; }
   .mapWrap.dragging { cursor: grabbing; }
@@ -50,16 +50,28 @@
   .rampLbl { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); }
   .note { font-size: .78rem; color: var(--muted); line-height: 1.45; }
   .note b { color: var(--text); font-weight: 600; }
+  .tabs { display: flex; gap: 6px; margin-top: 12px; }
+  .tabs button { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent;
+    color: var(--muted); font-size: .95rem; cursor: pointer; }
+  .tabs button.on { background: #24384f; color: var(--text); border-color: #36506e; }
+  .dcWrap { background: #cfd6dc; }
+  body.dc .antOnly { display: none !important; }
+  .rowlist { display: grid; gap: 5px; font-size: .85rem; }
+  .rowlist .row { display: flex; align-items: center; gap: 8px; }
 </style>
 </head>
 <body>
 <div class="app">
   <header>
-    <h1>Antarctica: Melt the Ice</h1>
-    <p class="sub">Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.</p>
+    <h1 id="pageTitle">Antarctica: Melt the Ice</h1>
+    <p class="sub" id="pageSub">Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.</p>
+    <div class="tabs" id="tabs">
+      <button data-tab="ant" class="on">Antarctica</button>
+      <button data-tab="dc">DC Metro</button>
+    </div>
   </header>
 
-  <div class="mapWrap" id="mapWrap">
+  <div class="mapWrap antOnly" id="mapWrap">
     <canvas id="map"></canvas>
     <div class="loading" id="loading">Unpacking 1.4 million cells of ice…</div>
     <div class="readout" id="readout"></div>
@@ -67,6 +79,16 @@
       <button id="zoomIn" title="Zoom in">+</button>
       <button id="zoomOut" title="Zoom out">−</button>
       <button id="zoomReset" title="Reset view">⟲</button>
+    </div>
+  </div>
+  <div class="mapWrap dcWrap dcOnly" id="dcWrap" style="display:none;aspect-ratio:6176/4580">
+    <canvas id="dcMap" style="width:100%;height:100%;display:block"></canvas>
+    <div class="loading" id="dcLoading" style="color:#33465a">Loading…</div>
+    <div class="readout" id="dcReadout"></div>
+    <div class="mapBtns">
+      <button id="dcZoomIn" title="Zoom in">+</button>
+      <button id="dcZoomOut" title="Zoom out">−</button>
+      <button id="dcZoomReset" title="Reset view">⟲</button>
     </div>
   </div>
 
@@ -78,26 +100,59 @@
         <button class="play" id="play">▶ Play</button>
       </div>
       <div class="big" id="pct">0%</div>
-      <div class="stats">
+      <div class="stats antOnly">
         <div class="stat"><div class="v" id="sSlr">0.0 m</div><div class="k">Global sea level rise</div></div>
         <div class="stat"><div class="v" id="sIce">–</div><div class="k">Ice volume remaining</div></div>
         <div class="stat"><div class="v" id="sLand">–</div><div class="k">Ice-free land</div></div>
         <div class="stat"><div class="v" id="sFlood">–</div><div class="k">Land &amp; ice now under the sea</div></div>
       </div>
+      <div class="stats dcOnly" style="display:none">
+        <div class="stat"><div class="v" id="dcRise">0.0 m</div><div class="k">Sea level rise in DC</div></div>
+        <div class="stat"><div class="v" id="dcLand">–</div><div class="k">Land flooded</div></div>
+        <div class="stat"><div class="v" id="dcBTouch">–</div><div class="k">Buildings with water at the walls</div></div>
+        <div class="stat"><div class="v" id="dcBSub">–</div><div class="k">Buildings fully submerged</div></div>
+        <div class="stat"><div class="v" id="dcDev">–</div><div class="k">Developed land lost</div></div>
+        <div class="stat"><div class="v" id="dcGreen">–</div><div class="k">Forest &amp; wetland lost</div></div>
+      </div>
     </div>
 
     <div class="card">
       <h2>Display</h2>
-      <label class="tog" style="margin-top:0"><input type="checkbox" id="coastToggle" checked> Show today's coastline</label>
-      <label class="tog"><input type="checkbox" id="reboundToggle" checked> Isostatic rebound (bedrock rises as ice is removed)</label>
+      <label class="tog antOnly" style="margin-top:0"><input type="checkbox" id="coastToggle" checked> Show today's coastline</label>
+      <label class="tog antOnly"><input type="checkbox" id="reboundToggle" checked> Isostatic rebound (bedrock rises as ice is removed)</label>
+      <label class="tog dcOnly" style="margin-top:0;display:none"><input type="checkbox" id="fpToggle" checked> Gravitational fingerprint (DC gets 1.25× the global rise)</label>
     </div>
 
-    <div class="card">
+    <div class="card antOnly">
       <h2>Legend</h2>
       <div class="legend" id="legend"></div>
     </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>Land cover under water</h2>
+      <div class="rowlist" id="dcLcRows"></div>
+    </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>Buildings submerged, by use</h2>
+      <div class="rowlist" id="dcOccRows"></div>
+    </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>Legend</h2>
+      <div class="legend" id="dcLegend"></div>
+    </div>
+    <div class="card note dcOnly" style="display:none">
+      <b>How it works.</b> The slider is shared with the Antarctica tab: the sea level rise from Antarctic melt is applied to the DC area.
+      With the fingerprint on, DC gets 1.25× the global number, because losing Antarctica's gravitational pull pushes water toward the
+      Northern Hemisphere (Mitrovica et al., 2009, <i>Science</i>). Water spreads only into ground connected to the tidal Potomac,
+      the Anacostia or the map edge, so enclosed low spots stay dry until water tops their rim. A building gets water at its walls when the
+      water reaches its lowest corner and is fully submerged when water passes its roof (highest ground + FEMA height; 6 m if unknown).
+      <br><br>
+      <b>Simplifications.</b> Antarctica only: no Greenland, glaciers or thermal expansion. No tides, storm surge, erosion or land subsidence.
+      Elevations are NAVD88, roughly today's mean sea level.
+      <br><br>
+      <b>Data.</b> USGS 3DEP 1/3 arc-second DEM (10 m), NLCD 2021 land cover (30 m), FEMA/ORNL USA Structures (Region 3), all in UTM 18N.
+    </div>
 
-    <div class="card note">
+    <div class="card note antOnly">
       <b>How it works.</b> Each area thins on its own schedule. Floating ice shelves go first, then low-lying, marine-based and more northerly ice (West Antarctica, the Peninsula, the coasts); the high East Antarctic plateau goes last, with some smooth random variation mixed in. The slider is the share of total ice volume melted. Sea level rise comes from the
       ice volume above flotation that is lost, spread over the world ocean (3.618 × 10⁸ km²).
       Ice floats wherever it is too thin to stay grounded below the new sea level. Elevations are shown relative to the <i>new</i> sea level.
@@ -178,6 +233,16 @@
     return { t: (lo + u) / steps, S: clockSlr[lo] + (clockSlr[hi] - clockSlr[lo]) * u };
   }
   const meltNow = new Float32Array(cellCount);
+  window.antarctica = {
+    // % of Antarctic ice volume melted that produces global rise g (null if more than full melt)
+    meltForGlobalRise(g) {
+      if (g > clockSlr[steps]) return null;
+      let lo = 0, hi = steps;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (clockSlr[mid] < g) lo = mid; else hi = mid; }
+      const span = clockSlr[hi] - clockSlr[lo], u = span > 0 ? (g - clockSlr[lo]) / span : 0;
+      return 100 * (clockVol[lo] + (clockVol[hi] - clockVol[lo]) * u);
+    }
+  };
   document.getElementById('loading').remove();
 
   // ---------- working arrays ----------
@@ -260,6 +325,7 @@
     }
     markEdges(cls, coastNow, isWet);
     state.stats = { S, iceVol, landArea, floodArea };
+    window.dispatchEvent(new CustomEvent('meltchange', { detail: { S, melt: state.melt } }));
   }
 
   function paint() {
@@ -456,6 +522,29 @@
   slider.addEventListener('pointerdown', stopPlay);
 
   resize(); legend(); compute(); paint();
+  window.antResize = resize;
+})();
+</script>
+<script>
+__DCMODULE__
+</script>
+<script>
+(function () {
+  const titles = {
+    ant: ['Antarctica: Melt the Ice', 'Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.'],
+    dc: ['Washington, DC: Rising Water', 'The same slider, seen from the DC metro area: watch the Potomac and Anacostia spread and buildings go under.']
+  };
+  function setTab(tab) {
+    document.body.classList.toggle('dc', tab === 'dc');
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+    document.querySelectorAll('.dcOnly').forEach(el => el.style.display = tab === 'dc' ? '' : 'none');
+    document.getElementById('pageTitle').textContent = titles[tab][0];
+    document.getElementById('pageSub').textContent = titles[tab][1];
+    if (tab === 'dc') window.dcMap.show(); else { window.dcMap.hide(); window.antResize && window.antResize(); }
+    try { history.replaceState(null, '', tab === 'dc' ? '#dc' : '#antarctica'); } catch (e) {}
+  }
+  document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  if (location.hash === '#dc') setTab('dc');
 })();
 </script>
 </body>
