@@ -3,7 +3,7 @@
   const FP = 1.25;                       // Antarctic sea-level fingerprint factor for the Mid-Atlantic
   const ui = id => document.getElementById(id);
   const wrap = ui('dcWrap'), canvas = ui('dcMap'), ctx = canvas.getContext('2d');
-  const st = { globalS: 0, fp: true, loaded: false, visible: false, dirty: true };
+  const st = { globalS: 0, fp: true, states: true, loaded: false, visible: false, dirty: true };
   let meta, W, H, flood, base, waterCv, waterCtx, waterImg, dotCv, dotCtx, dotImg;
   let bStart, bSub, bOcc, bNv, bOff, coords, bCell, tileStart;
 
@@ -125,6 +125,28 @@
     if (s < 0.9) {
       ctx.globalAlpha = 0.85; ctx.drawImage(dotCv, 0, 0, W, H, 0, 0, W * 2, H * 2); ctx.globalAlpha = 1;
     } else drawPolygons(s, ox, oy);
+    if (st.states) drawStates(s, ox, oy);
+  }
+  // state boundaries (Census TIGER) with a white halo, plus labels, drawn at constant screen width
+  function drawStates(s, ox, oy) {
+    const dpr = window.devicePixelRatio || 1, S = meta.states;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const path = new Path2D();
+    for (const line of S.lines) {
+      path.moveTo(line[0][0] * s + ox, line[0][1] * s + oy);
+      for (let i = 1; i < line.length; i++) path.lineTo(line[i][0] * s + ox, line[i][1] * s + oy);
+    }
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 5 * dpr; ctx.setLineDash([]); ctx.stroke(path);
+    ctx.strokeStyle = '#2a2140'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([9 * dpr, 4 * dpr, 2 * dpr, 4 * dpr]); ctx.stroke(path);
+    ctx.setLineDash([]);
+    ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4 * dpr; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.fillStyle = '#2a2140';
+    for (const [name, x, y] of S.labels) {
+      const sx = x * s + ox, sy = y * s + oy;
+      if (sx < 0 || sy < 0 || sx > canvas.width || sy > canvas.height) continue;
+      ctx.strokeText(name.split('').join(String.fromCharCode(8202)), sx, sy); ctx.fillText(name.split('').join(String.fromCharCode(8202)), sx, sy);
+    }
   }
   function drawPolygons(s, ox, oy) {
     const lv = localRise() / 0.5, t = meta.tiles, tilePx = t.size / 10;
@@ -246,6 +268,7 @@
     const lc = [[21, 'Developed (open → high intensity)'], [41, 'Forest'], [81, 'Pasture & crops'], [90, 'Wetlands'], [11, "Today's rivers & bay"]];
     ui('dcLegend').innerHTML =
       `<div>New flood water, by depth<div class="ramp" style="background:${ramp}"></div><div class="rampLbl"><span>0 m</span><span>35</span><span>70 m</span></div></div>` +
+      `<div class="row"><span class="sw" style="background:repeating-linear-gradient(90deg,#2a2140 0 6px,#fff 6px 8px);height:4px;border:0"></span>State boundary</div>` +
       sw('#353b44', 'Building, dry') + sw('#f4a340', 'Building, water at the walls') + sw('#c8381f', 'Building, nearly submerged') +
       `<div class="note" style="margin:2px 0">Fully submerged buildings disappear. Individual footprints appear when you zoom in.</div>` +
       lc.map(([k, l]) => sw(`rgb(${meta.nlcdPal[k]})`, l)).join('');
@@ -260,6 +283,7 @@
   }
   window.addEventListener('meltchange', e => { st.globalS = e.detail.S; update(); });
   ui('fpToggle').addEventListener('change', e => { st.fp = e.target.checked; st.dirty = true; update(); });
+  ui('stateToggle').addEventListener('change', e => { st.states = e.target.checked; draw(); });
   window.dcMap = {
     show() { st.visible = true; if (!st.loaded && !st.started) { st.started = true; load(); } resize(); if (st.dirty) update(); },
     hide() { st.visible = false; }
