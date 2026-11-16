@@ -58,6 +58,15 @@
   body.dc .antOnly { display: none !important; }
   .rowlist { display: grid; gap: 5px; font-size: .85rem; }
   .rowlist .row { display: flex; align-items: center; gap: 8px; }
+  .statHead { display: none; grid-column: 1 / -1; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin-top: 4px; }
+  /* Wide browsers: both maps side by side (equal heights: flex-grow matches each map's aspect ratio) */
+  body.both .tabs { display: none; }
+  body.both .mapWrap { max-height: none; }
+  body.both #mapWrap { flex: 1 1 0; aspect-ratio: 1 / 1; }
+  body.both #dcWrap { flex: 1.3526 1 0; }
+  body.both .side { max-width: none; flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  body.both .side .card { flex: 1 1 300px; }
+  body.both .statHead { display: block; }
 </style>
 </head>
 <body>
@@ -101,12 +110,14 @@
       </div>
       <div class="big" id="pct">0%</div>
       <div class="stats antOnly">
+        <div class="statHead">Antarctica</div>
         <div class="stat"><div class="v" id="sSlr">0.0 m</div><div class="k">Global sea level rise</div></div>
         <div class="stat"><div class="v" id="sIce">–</div><div class="k">Ice volume remaining</div></div>
         <div class="stat"><div class="v" id="sLand">–</div><div class="k">Ice-free land</div></div>
         <div class="stat"><div class="v" id="sFlood">–</div><div class="k">Land &amp; ice now under the sea</div></div>
       </div>
       <div class="stats dcOnly" style="display:none">
+        <div class="statHead">Washington, DC</div>
         <div class="stat"><div class="v" id="dcRise">0.0 m</div><div class="k">Sea level rise in DC</div></div>
         <div class="stat"><div class="v" id="dcLand">–</div><div class="k">Land flooded</div></div>
         <div class="stat"><div class="v" id="dcBTouch">–</div><div class="k">Buildings with water at the walls</div></div>
@@ -120,12 +131,12 @@
       <h2>Display</h2>
       <label class="tog antOnly" style="margin-top:0"><input type="checkbox" id="coastToggle" checked> Show today's coastline</label>
       <label class="tog antOnly"><input type="checkbox" id="reboundToggle" checked> Isostatic rebound (bedrock rises as ice is removed)</label>
-      <label class="tog dcOnly" style="margin-top:0;display:none"><input type="checkbox" id="fpToggle" checked> Gravitational fingerprint (DC gets 1.25× the global rise)</label>
+      <label class="tog dcOnly" style="display:none"><input type="checkbox" id="fpToggle" checked> Gravitational fingerprint (DC gets 1.25× the global rise)</label>
       <label class="tog dcOnly" style="display:none"><input type="checkbox" id="stateToggle" checked> Show state, county and city boundaries</label>
     </div>
 
     <div class="card antOnly">
-      <h2>Legend</h2>
+      <h2>Antarctica legend</h2>
       <div class="legend" id="legend"></div>
     </div>
     <div class="card dcOnly" style="display:none">
@@ -137,7 +148,7 @@
       <div class="rowlist" id="dcOccRows"></div>
     </div>
     <div class="card dcOnly" style="display:none">
-      <h2>Legend</h2>
+      <h2>DC legend</h2>
       <div class="legend" id="dcLegend"></div>
     </div>
     <div class="card note dcOnly" style="display:none">
@@ -845,7 +856,8 @@
   ui('stateToggle').addEventListener('change', e => { st.states = e.target.checked; draw(); });
   window.dcMap = {
     show() { st.visible = true; if (!st.loaded && !st.started) { st.started = true; load(); } resize(); if (st.dirty) update(); },
-    hide() { st.visible = false; }
+    hide() { st.visible = false; },
+    resize() { if (st.visible) resize(); }
   };
 })();
 
@@ -854,20 +866,38 @@
 (function () {
   const titles = {
     ant: ['Antarctica: Melt the Ice', 'Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.'],
-    dc: ['Washington, DC: Rising Water', 'The same slider, seen from the DC metro area: watch the Potomac and Anacostia spread and buildings go under.']
+    dc: ['Washington, DC: Rising Water', 'The same slider, seen from the DC metro area: watch the Potomac and Anacostia spread and buildings go under.'],
+    both: ['Antarctica: Melt the Ice', 'One slider, two maps: melt Antarctica on the left and watch the water rise around Washington, DC on the right.']
   };
+  const wideQuery = matchMedia('(min-width: 1100px) and (pointer: fine)');
+  let currentTab = location.hash === '#dc' ? 'dc' : 'ant';
+  function setHeading(k) {
+    document.getElementById('pageTitle').textContent = titles[k][0];
+    document.getElementById('pageSub').textContent = titles[k][1];
+  }
+  function showDcElements(on) { document.querySelectorAll('.dcOnly').forEach(el => el.style.display = on ? '' : 'none'); }
   function setTab(tab) {
+    currentTab = tab;
+    if (wideQuery.matches) return layout();
+    document.body.classList.remove('both');
     document.body.classList.toggle('dc', tab === 'dc');
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-    document.querySelectorAll('.dcOnly').forEach(el => el.style.display = tab === 'dc' ? '' : 'none');
-    document.getElementById('pageTitle').textContent = titles[tab][0];
-    document.getElementById('pageSub').textContent = titles[tab][1];
+    showDcElements(tab === 'dc'); setHeading(tab);
     window.antVisible = tab !== 'dc';
     if (tab === 'dc') window.dcMap.show(); else { window.dcMap.hide(); window.antResize && window.antResize(); }
     try { history.replaceState(null, '', tab === 'dc' ? '#dc' : '#antarctica'); } catch (e) {}
   }
+  function layout() {
+    if (!wideQuery.matches) return setTab(currentTab);
+    document.body.classList.add('both'); document.body.classList.remove('dc');
+    showDcElements(true); setHeading('both');
+    window.antVisible = true;
+    window.dcMap.show(); window.antResize && window.antResize();
+  }
+  wideQuery.addEventListener('change', layout);
+  window.addEventListener('resize', () => { if (wideQuery.matches) { window.antResize && window.antResize(); window.dcMap.resize(); } });
   document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
-  if (location.hash === '#dc') setTab('dc');
+  layout();
 })();
 </script>
 </body>

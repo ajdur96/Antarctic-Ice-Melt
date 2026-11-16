@@ -84,7 +84,7 @@ for f in g['features']:
     bb = transform(tr.transform, shape(f['geometry'])).boundary.intersection(ext.buffer(-1)).simplify(4)
     lines += [toPx(l) for l in getattr(bb, 'geoms', [bb]) if not l.is_empty and l.length >= 50]
 labels = []
-for name, lon, lat in [('VIRGINIA', -77.27, 38.82), ('MARYLAND', -77.15, 39.012), ('MARYLAND', -76.95, 38.80), ('D.C.', -77.015, 38.905)]:
+for name, lon, lat in [('VIRGINIA', -77.27, 38.82), ('MARYLAND', -77.06, 39.022), ('MARYLAND', -76.95, 38.80), ('D.C.', -77.015, 38.905)]:
     x, y = tr.transform(lon, lat); labels.append([name, round((x - X0) / 10), round((Y0top - y) / 10)])
 cg = json.loads(open(TIGER + '/county.geo.json', encoding='latin-1').read())
 arl = transform(tr.transform, shape([f for f in cg['features'] if str(f['properties'].get('GEOID10')) == '51013'][0]['geometry']))

@@ -315,6 +315,7 @@
   ui('stateToggle').addEventListener('change', e => { st.states = e.target.checked; draw(); });
   window.dcMap = {
     show() { st.visible = true; if (!st.loaded && !st.started) { st.started = true; load(); } resize(); if (st.dirty) update(); },
-    hide() { st.visible = false; }
+    hide() { st.visible = false; },
+    resize() { if (st.visible) resize(); }
   };
 })();
