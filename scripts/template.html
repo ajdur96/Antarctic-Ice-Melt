@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Antarctica: Melt the Ice</title>
+<style>
+  :root {
+    --bg: #0d1520; --panel: #16212f; --text: #e6edf5; --muted: #8fa3b8;
+    --accent: #4fc3d9; --line: #263548;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .app { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
+  header { width: 100%; }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; letter-spacing: .02em; }
+  .sub { color: var(--muted); font-size: .9rem; margin: 0; }
+  .mapWrap { position: relative; flex: 1 1 560px; aspect-ratio: 1 / 1; max-height: 86vh; align-self: flex-start;
+    background: #0a1a33; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+    touch-action: none; cursor: grab; }
+  .mapWrap.dragging { cursor: grabbing; }
+  #map { width: 100%; height: 100%; display: block; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+  .readout { position: absolute; left: 10px; bottom: 10px; background: rgba(13,21,32,.85);
+    padding: 8px 10px; border-radius: 8px; font-size: .8rem; line-height: 1.45;
+    pointer-events: none; min-width: 180px; display: none; }
+  .mapBtns { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .mapBtns button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line);
+    background: rgba(22,33,47,.9); color: var(--text); font-size: 1.1rem; cursor: pointer; }
+  .side { flex: 1 1 300px; max-width: 420px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
+  .sliderRow { display: flex; align-items: center; gap: 10px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 28px; }
+  .play { border: 1px solid var(--line); background: #1f2f42; color: var(--text);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: .9rem; }
+  .big { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .stat .v { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: .75rem; color: var(--muted); }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; padding: 8px; background: transparent; color: var(--muted); border: 0; cursor: pointer; font-size: .9rem; }
+  .seg button.on { background: #24384f; color: var(--text); }
+  label.tog { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: .9rem; cursor: pointer; }
+  .legend { display: grid; gap: 6px; font-size: .85rem; }
+  .legend .row { display: flex; align-items: center; gap: 8px; }
+  .sw { width: 18px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,.15); flex: none; }
+  .ramp { height: 12px; border-radius: 3px; margin: 4px 0 2px; }
+  .rampLbl { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); }
+  .note { font-size: .78rem; color: var(--muted); line-height: 1.45; }
+  .note b { color: var(--text); font-weight: 600; }
+  .tabs { display: flex; gap: 6px; margin-top: 12px; }
+  .tabs button { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent;
+    color: var(--muted); font-size: .95rem; cursor: pointer; }
+  .tabs button.on { background: #24384f; color: var(--text); border-color: #36506e; }
+  .dcWrap { background: #cfd6dc; }
+  body.dc .antOnly { display: none !important; }
+  .rowlist { display: grid; gap: 5px; font-size: .85rem; }
+  .rowlist .row { display: flex; align-items: center; gap: 8px; }
+  .statHead { display: none; grid-column: 1 / -1; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin-top: 4px; }
+  /* Wide browsers: both maps side by side (equal heights: flex-grow matches each map's aspect ratio) */
+  body.both .tabs { display: none; }
+  body.both .mapWrap { max-height: none; }
+  body.both #mapWrap { flex: 1 1 0; aspect-ratio: 1 / 1; }
+  body.both #dcWrap { flex: 1.3526 1 0; }
+  body.both .side { max-width: none; flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  body.both .side .card { flex: 1 1 300px; }
+  body.both .statHead { display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1 id="pageTitle">Antarctica: Melt the Ice</h1>
+    <p class="sub" id="pageSub">Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.</p>
+    <div class="tabs" id="tabs">
+      <button data-tab="ant" class="on">Antarctica</button>
+      <button data-tab="dc">DC Metro</button>
+    </div>
+  </header>
+
+  <div class="mapWrap antOnly" id="mapWrap">
+    <canvas id="map"></canvas>
+    <div class="loading" id="loading">Unpacking 1.4 million cells of ice…</div>
+    <div class="readout" id="readout"></div>
+    <div class="mapBtns">
+      <button id="zoomIn" title="Zoom in">+</button>
+      <button id="zoomOut" title="Zoom out">−</button>
+      <button id="zoomReset" title="Reset view">⟲</button>
+    </div>
+  </div>
+  <div class="mapWrap dcWrap dcOnly" id="dcWrap" style="display:none;aspect-ratio:4020/2972">
+    <canvas id="dcMap" style="width:100%;height:100%;display:block"></canvas>
+    <div class="loading" id="dcLoading" style="color:#33465a">Loading…</div>
+    <div class="readout" id="dcReadout"></div>
+    <div class="mapBtns">
+      <button id="dcZoomIn" title="Zoom in">+</button>
+      <button id="dcZoomOut" title="Zoom out">−</button>
+      <button id="dcZoomReset" title="Reset view">⟲</button>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>Ice volume melted</h2>
+      <div class="sliderRow">
+        <input type="range" id="melt" min="0" max="100" step="1" value="0">
+        <button class="play" id="play">▶ Play</button>
+      </div>
+      <div class="big" id="pct">0%</div>
+      <div class="stats antOnly">
+        <div class="statHead">Antarctica</div>
+        <div class="stat"><div class="v" id="sSlr">0.0 m</div><div class="k">Global sea level rise</div></div>
+        <div class="stat"><div class="v" id="sIce">–</div><div class="k">Ice volume remaining</div></div>
+        <div class="stat"><div class="v" id="sLand">–</div><div class="k">Ice-free land</div></div>
+        <div class="stat"><div class="v" id="sFlood">–</div><div class="k">Land &amp; ice now under the sea</div></div>
+      </div>
+      <div class="stats dcOnly" style="display:none">
+        <div class="statHead">Washington, DC</div>
+        <div class="stat"><div class="v" id="dcRise">0.0 m</div><div class="k">Sea level rise in DC</div></div>
+        <div class="stat"><div class="v" id="dcLand">–</div><div class="k">Land flooded</div></div>
+        <div class="stat"><div class="v" id="dcBTouch">–</div><div class="k">Buildings with water at the walls</div></div>
+        <div class="stat"><div class="v" id="dcBSub">–</div><div class="k">Buildings fully submerged</div></div>
+        <div class="stat"><div class="v" id="dcDev">–</div><div class="k">Developed land lost</div></div>
+        <div class="stat"><div class="v" id="dcGreen">–</div><div class="k">Forest &amp; wetland lost</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Display</h2>
+      <label class="tog antOnly" style="margin-top:0"><input type="checkbox" id="coastToggle" checked> Show today's coastline</label>
+      <label class="tog antOnly"><input type="checkbox" id="reboundToggle" checked> Isostatic rebound (bedrock rises as ice is removed)</label>
+      <label class="tog dcOnly" style="display:none"><input type="checkbox" id="fpToggle" checked> Gravitational fingerprint (DC gets 1.25× the global rise)</label>
+      <label class="tog dcOnly" style="display:none"><input type="checkbox" id="stateToggle" checked> Show state, county and city boundaries</label>
+    </div>
+
+    <div class="card antOnly">
+      <h2>Antarctica legend</h2>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>Land cover under water</h2>
+      <div class="rowlist" id="dcLcRows"></div>
+    </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>Buildings submerged, by use</h2>
+      <div class="rowlist" id="dcOccRows"></div>
+    </div>
+    <div class="card dcOnly" style="display:none">
+      <h2>DC legend</h2>
+      <div class="legend" id="dcLegend"></div>
+    </div>
+    <div class="card note dcOnly" style="display:none">
+      <b>How it works.</b> The slider is shared with the Antarctica tab: the sea level rise from Antarctic melt is applied to the DC area.
+      With the fingerprint on, DC gets 1.25× the global number, because losing Antarctica's gravitational pull pushes water toward the
+      Northern Hemisphere (Mitrovica et al., 2009, <i>Science</i>). Water spreads only into ground connected to the tidal Potomac,
+      the Anacostia or the map edge, so enclosed low spots stay dry until water tops their rim. A building gets water at its walls when the
+      water reaches its lowest corner and is fully submerged when water passes its roof (highest ground + FEMA height; 6 m if unknown).
+      <br><br>
+      <b>Simplifications.</b> Antarctica only: no Greenland, glaciers or thermal expansion. No tides, storm surge, erosion or land subsidence.
+      Elevations are NAVD88, roughly today's mean sea level.
+      <br><br>
+      <b>Data.</b> USGS 3DEP 1/3 arc-second DEM (10 m), NLCD 2021 land cover (30 m), FEMA/ORNL USA Structures (Region 3), Census TIGER 2010 state and county boundaries, all in UTM 18N.
+    </div>
+
+    <div class="card note antOnly">
+      <b>How it works.</b> Each area thins on its own schedule. Floating ice shelves go first, then low-lying, marine-based and more northerly ice (West Antarctica, the Peninsula, the coasts); the high East Antarctic plateau goes last, with some smooth random variation mixed in. The slider is the share of total ice volume melted. Sea level rise comes from the
+      ice volume above flotation that is lost, spread over the world ocean (3.618 × 10⁸ km²).
+      Ice floats wherever it is too thin to stay grounded below the new sea level. Elevations are shown relative to the <i>new</i> sea level.
+      <br><br>
+      <b>Simplifications.</b> The thaw order is an illustrative score, not a climate model. Ocean density, gravitational
+      effects and the effect of rebound on sea level are ignored. Rebound uses full equilibrium (ρ<sub>ice</sub>/ρ<sub>mantle</sub> ≈ 0.28),
+      which takes thousands of years.
+      <br><br>
+      <b>Data.</b> Bedmap2 (Fretwell et al., 2013, <i>The Cryosphere</i>), resampled from 1 km to 5 km, Antarctic Polar Stereographic (EPSG:3031).
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="antarcticaData">__DATA__</script>
+<script>
+(async function () {
+  // ---------- constants ----------
+  const rhoIce = 917, rhoWater = 1027, iceToMantle = 917 / 3300;
+  const floatRatio = rhoIce / rhoWater;
+  const CLS = { ocean: 0, grounded: 1, shelf: 2, rock: 3, newLand: 4, flooded: 5 };
+
+  // ---------- decode data ----------
+  const raw = JSON.parse(document.getElementById('antarcticaData').textContent);
+  async function unpack(b64) {
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const stream = new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  const n = raw.n, cell = raw.cell, cellCount = n * n;
+  const bed = new Int16Array((await unpack(raw.bed)).buffer);
+  const thick = new Uint16Array((await unpack(raw.thk)).buffer);
+  const cls0 = await unpack(raw.cls);
+  const thawOrder = await unpack(raw.ord);   // 0 = thaws first, 255 = thaws last
+  const slrTable = raw.slr;
+
+  // true cell area (km²), correcting polar-stereographic scale distortion (true scale at 71°S)
+  const R = 6371000, sinC = Math.sin(71 * Math.PI / 180);
+  const area = new Float32Array(cellCount);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const x = raw.x0 + c * cell, y = raw.y0 - r * cell;
+    const colat = 2 * Math.atan(Math.hypot(x, y) / (R * (1 + sinC)));
+    const k = (1 + sinC) / (1 + Math.cos(colat));
+    area[r * n + c] = (cell * cell / 1e6) / (k * k);
+  }
+  // ---------- staggered melt ----------
+  // Each cell thins over its own window of the melt clock t (0..1). Cells that thaw first
+  // (shelves, low, marine-based, northern ice) start early; the high plateau finishes last.
+  const meltWindow = 0.35;
+  const startAt = new Float32Array(cellCount);
+  const iceCells = [];
+  for (let i = 0; i < cellCount; i++) {
+    startAt[i] = thawOrder[i] / 255 * (1 - meltWindow);
+    if (thick[i] > 0 && cls0[i] !== 0) iceCells.push(i);
+  }
+  function cellMelt(i, t) {
+    const u = Math.min(1, Math.max(0, (t - startAt[i]) / meltWindow));
+    return u * u * (3 - 2 * u);
+  }
+  // Pre-compute how much volume and sea level each point on the melt clock represents, so
+  // the slider can be "% of ice volume melted" and sea level rise stays physically based.
+  const steps = 200, clockVol = new Float64Array(steps + 1), clockSlr = new Float64Array(steps + 1);
+  {
+    let vol0 = 0, vaf0 = 0;
+    const vafOf = (i, H) => cls0[i] === 1 ? Math.max(0, H - Math.max(0, -bed[i]) * rhoWater / rhoIce) : 0;
+    for (const i of iceCells) { vol0 += thick[i] * area[i]; vaf0 += vafOf(i, thick[i]) * area[i]; }
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps; let vol = 0, vaf = 0;
+      for (const i of iceCells) { const H = thick[i] * (1 - cellMelt(i, t)); vol += H * area[i]; vaf += vafOf(i, H) * area[i]; }
+      clockVol[s] = 1 - vol / vol0; clockSlr[s] = vaf0 - vaf;
+    }
+    const full = clockSlr[steps];
+    for (let s = 0; s <= steps; s++) clockSlr[s] = clockSlr[s] / full * slrTable[100];  // calibrated to the 1 km total
+  }
+  function clockFor(volFrac) {
+    let lo = 0, hi = steps;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (clockVol[mid] < volFrac) lo = mid; else hi = mid; }
+    const span = clockVol[hi] - clockVol[lo], u = span > 0 ? (volFrac - clockVol[lo]) / span : 0;
+    return { t: (lo + u) / steps, S: clockSlr[lo] + (clockSlr[hi] - clockSlr[lo]) * u };
+  }
+  const meltNow = new Float32Array(cellCount);
+  window.antarctica = {
+    // % of Antarctic ice volume melted that produces global rise g (null if more than full melt)
+    meltForGlobalRise(g) {
+      if (g > clockSlr[steps]) return null;
+      let lo = 0, hi = steps;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (clockSlr[mid] < g) lo = mid; else hi = mid; }
+      const span = clockSlr[hi] - clockSlr[lo], u = span > 0 ? (g - clockSlr[lo]) / span : 0;
+      return 100 * (clockVol[lo] + (clockVol[hi] - clockVol[lo]) * u);
+    }
+  };
+  document.getElementById('loading').remove();
+
+  // ---------- working arrays ----------
+  const cls = new Uint8Array(cellCount);
+  const elev = new Float32Array(cellCount);   // height relative to new sea level (negative = depth)
+  const coastNow = new Uint8Array(cellCount);
+  const coastToday = new Uint8Array(cellCount);
+  const isWet = k => k === CLS.ocean || k === CLS.flooded;
+
+  // today's coastline (ice front / rock edge vs ocean), 2 cells thick for visibility
+  markEdges(cls0, coastToday, k => k === CLS.ocean);
+
+  function markEdges(classes, out, wetFn) {
+    out.fill(0);
+    for (let r = 1; r < n - 1; r++) for (let c = 1; c < n - 1; c++) {
+      const i = r * n + c, w = wetFn(classes[i]);
+      if (w !== wetFn(classes[i + 1]) || w !== wetFn(classes[i + n])) {
+        out[i] = 1; out[i + 1] = 1; out[i + n] = 1;
+      }
+    }
+  }
+
+  // ---------- color ramps ----------
+  function lerpStops(stops, t) {
+    if (t <= stops[0][0]) return stops[0][1];
+    for (let s = 1; s < stops.length; s++) {
+      if (t <= stops[s][0]) {
+        const [t0, a] = stops[s - 1], [t1, b] = stops[s], u = (t - t0) / (t1 - t0);
+        return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+      }
+    }
+    return stops[stops.length - 1][1];
+  }
+  const oceanStops = [[0, [92, 160, 205]], [500, [40, 100, 165]], [2000, [22, 62, 120]], [5000, [10, 28, 64]]];
+  const floodStops = [[0, [110, 215, 210]], [500, [40, 160, 170]], [1500, [20, 105, 125]], [3000, [12, 70, 95]]];
+  const landStops = [[0, [86, 140, 82]], [300, [150, 170, 100]], [900, [196, 176, 120]],
+                     [1800, [160, 120, 85]], [3000, [130, 115, 108]], [4500, [235, 235, 235]]];
+  const elevStops = [[0, [52, 120, 70]], [500, [140, 175, 95]], [1200, [215, 200, 130]],
+                     [2200, [185, 130, 80]], [3200, [150, 120, 120]], [4200, [245, 245, 250]]];
+  // pre-baked lookup tables (1 m bins) for speed
+  function bake(stops, max) {
+    const lut = new Uint8ClampedArray((max + 1) * 3);
+    for (let v = 0; v <= max; v++) { const c = lerpStops(stops, v); lut.set(c, v * 3); }
+    return lut;
+  }
+  const lutOcean = bake(oceanStops, 7000), lutFlood = bake(floodStops, 7000),
+        lutLand = bake(landStops, 6000), lutElev = bake(elevStops, 6000);
+
+  // ---------- canvas ----------
+  const off = document.createElement('canvas'); off.width = n; off.height = n;
+  const offCtx = off.getContext('2d');
+  const img = offCtx.createImageData(n, n);
+  const px = img.data;
+
+  const iceStops = [[0, [196, 220, 236]], [1500, [222, 235, 246]], [3000, [242, 246, 251]], [4200, [255, 255, 255]]];
+  const lutIce = bake(iceStops, 6000);
+  const state = { melt: 0, coast: true, rebound: true, stats: {} };
+
+  function compute() {
+    const { t, S } = clockFor(state.melt);
+    let iceVol = 0, landArea = 0, floodArea = 0;
+    for (let i = 0; i < cellCount; i++) {
+      const c0 = cls0[i], H0 = thick[i];
+      const m = H0 > 0 ? cellMelt(i, t) : 0;
+      meltNow[i] = m;
+      const b = bed[i] + (state.rebound ? m * H0 * iceToMantle : 0);
+      if (c0 === CLS.ocean) { cls[i] = CLS.ocean; elev[i] = b - S; continue; }
+      const H = H0 * (1 - m);
+      iceVol += H / 1000 * area[i];
+      if (H > 1) {
+        if (H * floatRatio < S - b) { cls[i] = CLS.shelf; elev[i] = H * (1 - floatRatio); }
+        else { cls[i] = CLS.grounded; elev[i] = b + H - S; }
+      } else if (b > S) {
+        cls[i] = (c0 === CLS.rock) ? CLS.rock : CLS.newLand; elev[i] = b - S; landArea += area[i];
+      } else {
+        // shelves were already floating, so their loss isn't "new" ocean
+        cls[i] = (c0 === CLS.shelf) ? CLS.ocean : CLS.flooded; elev[i] = b - S;
+        if (c0 !== CLS.shelf) floodArea += area[i];
+      }
+    }
+    markEdges(cls, coastNow, isWet);
+    state.stats = { S, iceVol, landArea, floodArea };
+    window.dispatchEvent(new CustomEvent('meltchange', { detail: { S, melt: state.melt } }));
+  }
+
+  function paint() {
+    const S = state.stats.S;
+    for (let r = 0; r < n; r++) {
+      for (let col = 0; col < n; col++) {
+        const i = r * n + col, k = cls[i], z = elev[i];
+        // hillshade from the NW, 5 km cells; vertical exaggeration for drama
+        const zl = col > 0 ? elev[i - 1] : z, zr = col < n - 1 ? elev[i + 1] : z;
+        const zu = r > 0 ? elev[i - n] : z, zd = r < n - 1 ? elev[i + n] : z;
+        const dx = (zr - zl) / (2 * cell) * 25, dy = (zd - zu) / (2 * cell) * 25;
+        let shade = (1 - (-dx - dy) * 0.7071) / Math.sqrt(1 + dx * dx + dy * dy);
+        shade = Math.max(0.55, Math.min(1.25, shade));
+        let R_, G, B;
+        if (k === CLS.ocean || k === CLS.flooded) {
+          const d = Math.min(7000, Math.max(0, Math.round(-z))) * 3;
+          const lut = k === CLS.flooded ? lutFlood : lutOcean;
+          R_ = lut[d]; G = lut[d + 1]; B = lut[d + 2];
+          shade = 1 + (shade - 1) * 0.35;
+        } else if (k === CLS.rock || k === CLS.newLand) {
+          const e = Math.min(6000, Math.max(0, Math.round(z))) * 3;
+          R_ = lutLand[e]; G = lutLand[e + 1]; B = lutLand[e + 2];
+        } else {
+          // ice: tinted by surface elevation, turning translucent as it thins so the terrain beneath shows through
+          const H0 = thick[i], m = meltNow[i], H = H0 * (1 - m);
+          const a = Math.pow(Math.min(1, H / Math.max(1, Math.min(H0, 1500))), 0.8);
+          let iR, iG, iB;
+          if (k === CLS.shelf) { iR = 176; iG = 206; iB = 226; }
+          else { const e = Math.min(6000, Math.max(0, Math.round(z))) * 3; iR = lutIce[e]; iG = lutIce[e + 1]; iB = lutIce[e + 2]; }
+          const bedZ = bed[i] + (state.rebound ? m * H0 * iceToMantle : 0) - S;
+          let gR, gG, gB;
+          if (bedZ > 0) { const e = Math.min(6000, Math.round(bedZ)) * 3; gR = lutLand[e]; gG = lutLand[e + 1]; gB = lutLand[e + 2]; }
+          else { const d = Math.min(7000, Math.round(-bedZ)) * 3, lut = k === CLS.shelf ? lutOcean : lutFlood; gR = lut[d]; gG = lut[d + 1]; gB = lut[d + 2]; }
+          R_ = a * iR + (1 - a) * gR; G = a * iG + (1 - a) * gG; B = a * iB + (1 - a) * gB;
+          if (k === CLS.shelf) shade = 1 + (shade - 1) * (1 - a);
+        }
+        const p = i * 4;
+        if (coastNow[i]) { R_ = 20; G = 24; B = 30; shade = 1; }
+        if (state.coast && coastToday[i] && state.melt > 0) { R_ = 255; G = 120; B = 60; shade = 1; }
+        px[p] = R_ * shade; px[p + 1] = G * shade; px[p + 2] = B * shade; px[p + 3] = 255;
+      }
+    }
+    offCtx.putImageData(img, 0, 0);
+    draw();
+    updateStats();
+  }
+
+  // ---------- view (pan / zoom) ----------
+  const canvas = document.getElementById('map'), ctx = canvas.getContext('2d');
+  const wrap = document.getElementById('mapWrap');
+  const view = { scale: 1, tx: 0, ty: 0 }; // in map-pixel units relative to fit
+  let fit = 1;
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 2 : 3), rect = wrap.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * dpr); canvas.height = Math.round(rect.height * dpr);
+    fit = Math.min(canvas.width, canvas.height) / n;
+    draw();
+  }
+  function draw() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#0a1a33'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const s = fit * view.scale;
+    ctx.imageSmoothingEnabled = s < 2;
+    ctx.setTransform(s, 0, 0, s, canvas.width / 2 + view.tx - n / 2 * s, canvas.height / 2 + view.ty - n / 2 * s);
+    ctx.drawImage(off, 0, 0);
+  }
+  function screenToCell(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect(), dpr = canvas.width / rect.width;
+    const sx = (clientX - rect.left) * dpr, sy = (clientY - rect.top) * dpr, s = fit * view.scale;
+    return [(sx - canvas.width / 2 - view.tx) / s + n / 2, (sy - canvas.height / 2 - view.ty) / s + n / 2];
+  }
+  function zoomAt(factor, clientX, clientY) {
+    const rect = canvas.getBoundingClientRect(), dpr = canvas.width / rect.width;
+    const sx = (clientX - rect.left) * dpr - canvas.width / 2, sy = (clientY - rect.top) * dpr - canvas.height / 2;
+    const newScale = Math.min(16, Math.max(1, view.scale * factor)), f = newScale / view.scale;
+    view.tx = sx - (sx - view.tx) * f; view.ty = sy - (sy - view.ty) * f; view.scale = newScale;
+    if (view.scale === 1) { view.tx = 0; view.ty = 0; }
+    draw();
+  }
+  wrap.addEventListener('wheel', e => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+  const pointers = new Map(); let pinchDist = 0, moved = false;
+  wrap.addEventListener('pointerdown', e => {
+    if (e.target.closest('.mapBtns')) return;
+    wrap.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.clientX, e.clientY]); moved = false;
+    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]); }
+    wrap.classList.add('dragging');
+  });
+  wrap.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) { showReadout(e.clientX, e.clientY); return; }
+    const prev = pointers.get(e.pointerId), dpr = canvas.width / canvas.getBoundingClientRect().width;
+    pointers.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pointers.size === 1) {
+      const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
+      if (Math.abs(dx) + Math.abs(dy) > 1) moved = true;
+      if (view.scale > 1) { view.tx += dx * dpr; view.ty += dy * dpr; draw(); }
+    } else if (pointers.size === 2) {
+      moved = true;
+      const [a, b] = [...pointers.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      zoomAt(d / pinchDist, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); pinchDist = d;
+    }
+  });
+  const endPointer = e => {
+    if (pointers.has(e.pointerId) && !moved && pointers.size === 1) showReadout(e.clientX, e.clientY);
+    pointers.delete(e.pointerId); if (!pointers.size) wrap.classList.remove('dragging');
+  };
+  wrap.addEventListener('pointerup', endPointer); wrap.addEventListener('pointercancel', endPointer);
+  wrap.addEventListener('pointerleave', () => { if (!pointers.size) readout.style.display = 'none'; });
+  document.getElementById('zoomIn').onclick = () => { const r = canvas.getBoundingClientRect(); zoomAt(1.6, r.left + r.width / 2, r.top + r.height / 2); };
+  document.getElementById('zoomOut').onclick = () => { const r = canvas.getBoundingClientRect(); zoomAt(1 / 1.6, r.left + r.width / 2, r.top + r.height / 2); };
+  document.getElementById('zoomReset').onclick = () => { view.scale = 1; view.tx = 0; view.ty = 0; draw(); };
+  window.addEventListener('resize', resize);
+
+  // ---------- readout ----------
+  const readout = document.getElementById('readout');
+  const clsName = ['Ocean', 'Grounded ice sheet', 'Floating ice shelf', 'Exposed rock (today)', 'Newly exposed land', 'Newly flooded'];
+  function showReadout(clientX, clientY) {
+    const [fc, fr] = screenToCell(clientX, clientY), c = Math.floor(fc), r = Math.floor(fr);
+    if (c < 0 || r < 0 || c >= n || r >= n) { readout.style.display = 'none'; return; }
+    const i = r * n + c, x = raw.x0 + c * cell, y = raw.y0 - r * cell;
+    const colat = 2 * Math.atan(Math.hypot(x, y) / (R * (1 + sinC)));
+    const lat = -(90 - colat * 180 / Math.PI), lon = Math.atan2(x, y) * 180 / Math.PI;
+    const H = thick[i] * (1 - meltNow[i]), k = cls[i];
+    const hasIce = k === CLS.grounded || k === CLS.shelf;
+    readout.innerHTML =
+      `<b>${clsName[k]}</b><br>` +
+      `${Math.abs(lat).toFixed(2)}°S, ${Math.abs(lon).toFixed(2)}°${lon < 0 ? 'W' : 'E'}<br>` +
+      (elev[i] >= 0 ? `Surface: ${Math.round(elev[i]).toLocaleString()} m above sea level<br>`
+                    : `Water depth: ${Math.round(-elev[i]).toLocaleString()} m<br>`) +
+      (hasIce ? `Ice thickness: ${Math.round(H).toLocaleString()} m<br>` : '') +
+      `Bedrock: ${Math.round(bed[i]).toLocaleString()} m (today's datum)`;
+    readout.style.display = 'block';
+  }
+
+  // ---------- stats + legend ----------
+  const fmtKm2 = v => v >= 1e6 ? (v / 1e6).toFixed(2) + ' M km²' : Math.round(v / 1000).toLocaleString() + 'k km²';
+  function updateStats() {
+    const s = state.stats;
+    document.getElementById('pct').textContent = Math.round(state.melt * 100) + '%';
+    document.getElementById('sSlr').textContent = s.S.toFixed(1) + ' m';
+    document.getElementById('sIce').textContent = (s.iceVol / 1e6).toFixed(1) + ' M km³';
+    document.getElementById('sLand').textContent = fmtKm2(s.landArea);
+    document.getElementById('sFlood').textContent = fmtKm2(s.floodArea);
+  }
+  function rampCss(stops, max) {
+    return 'linear-gradient(90deg,' + stops.map(([v, c]) => `rgb(${c.join(',')}) ${(v / max * 100).toFixed(0)}%`).join(',') + ')';
+  }
+  function legend() {
+    const sw = (rgb, label) => `<div class="row"><span class="sw" style="background:${rgb}"></span>${label}</div>`;
+    const coastRows = sw('#14181e', 'Coastline (current melt level)') + (state.coast ? sw('#ff783c', "Today's coastline") : '');
+    const ramp = (title, stops, max, labels) => `<div>${title}<div class="ramp" style="background:${rampCss(stops, max)}"></div>` +
+      `<div class="rampLbl">${labels.map(l => `<span>${l}</span>`).join('')}</div></div>`;
+    const html =
+      ramp('Ice sheet surface elevation', iceStops, 4200, ['0 m', '2,100', '4,200 m']) +
+      sw('rgb(176,206,226)', 'Floating ice shelf') +
+      ramp('Ice-free land elevation', landStops, 4500, ['0 m', '1,500', '3,000', '4,500 m']) +
+      ramp('Newly flooded (was land or ice), by depth', floodStops, 3000, ['0 m', '1,500', '3,000 m']) +
+      ramp('Ocean depth', oceanStops, 5000, ['0 m', '2,500', '5,000 m']) +
+      `<div class="note" style="margin:2px 0">Thinning ice turns see-through, revealing the land or seafloor beneath.</div>` +
+      coastRows;
+    document.getElementById('legend').innerHTML = html;
+  }
+
+  // ---------- controls ----------
+  const slider = document.getElementById('melt');
+  let pending = false;
+  function update() {
+    if (pending) return; pending = true;
+    requestAnimationFrame(() => { pending = false; compute(); if (window.antVisible === false) { antDirty = true; updateStats(); } else paint(); });
+  }
+  slider.addEventListener('input', () => { state.melt = slider.value / 100; update(); });
+  document.getElementById('coastToggle').addEventListener('change', e => { state.coast = e.target.checked; legend(); paint(); });
+  document.getElementById('reboundToggle').addEventListener('change', e => { state.rebound = e.target.checked; update(); });
+  // Play loops: melt to 100%, hold for a moment, then start over from 0% until paused.
+  const stepMs = 120, endPauseMs = 2500;
+  let playing = false, playTimer = null;
+  const playBtn = document.getElementById('play');
+  function setMelt(v) { slider.value = v; state.melt = v / 100; update(); }
+  function playStep() {
+    if (!playing) return;
+    if (+slider.value >= 100) {
+      playTimer = setTimeout(() => { if (playing) { setMelt(0); playTimer = setTimeout(playStep, stepMs); } }, endPauseMs);
+      return;
+    }
+    setMelt(+slider.value + 1);
+    playTimer = setTimeout(playStep, stepMs);
+  }
+  function stopPlay() { playing = false; clearTimeout(playTimer); playBtn.textContent = '▶ Play'; }
+  playBtn.addEventListener('click', () => {
+    if (playing) { stopPlay(); return; }
+    playing = true; playBtn.textContent = '❚❚ Pause';
+    if (+slider.value >= 100) setMelt(0);
+    playTimer = setTimeout(playStep, stepMs);
+  });
+  slider.addEventListener('pointerdown', stopPlay);
+
+  var antDirty = false;
+  resize(); legend(); compute(); paint();
+  window.antResize = () => { resize(); if (antDirty) { antDirty = false; paint(); } };
+})();
+</script>
+<script>
+__DCMODULE__
+</script>
+<script>
+(function () {
+  const titles = {
+    ant: ['Antarctica: Melt the Ice', 'Drag the slider to melt the ice sheet and watch the coastline redraw itself as the sea rises.'],
+    dc: ['Washington, DC: Rising Water', 'The same slider, seen from the DC metro area: watch the Potomac and Anacostia spread and buildings go under.'],
+    both: ['Antarctica: Melt the Ice', 'One slider, two maps: melt Antarctica on the left and watch the water rise around Washington, DC on the right.']
+  };
+  const wideQuery = matchMedia('(min-width: 1100px) and (pointer: fine)');
+  let currentTab = location.hash === '#dc' ? 'dc' : 'ant';
+  function setHeading(k) {
+    document.getElementById('pageTitle').textContent = titles[k][0];
+    document.getElementById('pageSub').textContent = titles[k][1];
+  }
+  function showDcElements(on) { document.querySelectorAll('.dcOnly').forEach(el => el.style.display = on ? '' : 'none'); }
+  function setTab(tab) {
+    currentTab = tab;
+    if (wideQuery.matches) return layout();
+    document.body.classList.remove('both');
+    document.body.classList.toggle('dc', tab === 'dc');
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+    showDcElements(tab === 'dc'); setHeading(tab);
+    window.antVisible = tab !== 'dc';
+    if (tab === 'dc') window.dcMap.show(); else { window.dcMap.hide(); window.antResize && window.antResize(); }
+    try { history.replaceState(null, '', tab === 'dc' ? '#dc' : '#antarctica'); } catch (e) {}
+  }
+  function layout() {
+    if (!wideQuery.matches) return setTab(currentTab);
+    document.body.classList.add('both'); document.body.classList.remove('dc');
+    showDcElements(true); setHeading('both');
+    window.antVisible = true;
+    window.dcMap.show(); window.antResize && window.antResize();
+  }
+  wideQuery.addEventListener('change', layout);
+  window.addEventListener('resize', () => { if (wideQuery.matches) { window.antResize && window.antResize(); window.dcMap.resize(); } });
+  document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  layout();
+})();
+</script>
+</body>
+</html>
